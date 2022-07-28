@@ -110,19 +110,17 @@ const getAllReservations = function (guest_id, limit = 10) {
   return pool
     .query(
       `
-        SELECT reservations.id, title, number_of_bedrooms, number_of_bathrooms, parking_spaces, cost_per_night, start_date, avg(property_reviews.rating) AS average_rating
+        SELECT DISTINCT reservations.*, title, thumbnail_photo_url, cover_photo_url, cost_per_night, parking_spaces, number_of_bathrooms, number_of_bedrooms
         FROM reservations
         JOIN properties ON properties.id = reservations.property_id
         JOIN property_reviews ON properties.id = property_reviews.property_id
         WHERE reservations.guest_id = $1
-        GROUP BY reservations.id, title, cost_per_night
         ORDER BY start_date
         LIMIT $2;
       `,
       [guest_id, limit]
     )
     .then((result) => {
-      console.log(result.rows);
       return result.rows;
     })
     .catch((err) => {
@@ -141,21 +139,27 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function (options, limit = 10) {
-  return pool
-    .query(
-      `
-        SELECT * 
-        FROM properties
-        LIMIT $1
-      `,
-      [limit]
-    )
-    .then((result) => {
-      return result.rows;
-    })
-    .catch((err) => {
-      console.log(err.message);
-    });
+  const queryParams = [];
+  let queryString = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  `;
+
+  if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    queryString += `WHERE city LIKE $${queryParams.length} `;
+  }
+
+  queryParams.push(limit);
+  queryString += `
+  GROUP BY properties.id
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
+  console.log(queryString, queryParams);
+  return pool.query(queryString, queryParams).then((res) => res.rows);
 };
 exports.getAllProperties = getAllProperties;
 
